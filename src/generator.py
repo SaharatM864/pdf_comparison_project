@@ -2,7 +2,7 @@ import io
 from typing import List
 from PIL import Image
 from docx import Document
-from docx.shared import Inches
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
@@ -24,6 +24,13 @@ def generate_docx(images: List[Image.Image], output_path: str):
     first_section.page_width = original_height
     first_section.page_height = original_width
 
+    # บีบระยะขอบกระดาษ (Margins) ให้แคบลง (0.5 นิ้ว) เพื่อเพิ่มพื้นที่วางรูปภาพให้กว้างขึ้น
+    margin_size = Inches(0.5)
+    first_section.left_margin = margin_size
+    first_section.right_margin = margin_size
+    first_section.top_margin = margin_size
+    first_section.bottom_margin = margin_size
+
     for idx, img in enumerate(images):
         # ใช้ I/O stream แปลงภาพพักไว้ในหน่วยความจำ (ไม่ต้องบันทึกลงฮาร์ดดิสก์ให้รก)
         virtual_image_stream = io.BytesIO()
@@ -33,6 +40,12 @@ def generate_docx(images: List[Image.Image], output_path: str):
         # สร้างย่อหน้าใหม่ จัดกึ่งกลาง และบรรจุภาพลงไป
         paragraph_container = docx_document.add_paragraph()
         paragraph_container.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # ปรับแก้พฤติกรรม Paragraph ดันบรรทัด (Spacing Overflow) ที่ทำให้เกิดหน้าว่าง (Empty Page Bug)
+        paragraph_format = paragraph_container.paragraph_format
+        paragraph_format.space_before = Pt(0)
+        paragraph_format.space_after = Pt(0)
+
         run_element = paragraph_container.add_run()
 
         # กำหนดความกว้างภาพประมาณ 9.5 นิ้ว เพื่อให้พอดีกับกระดาษแนวนอน A4/Letter

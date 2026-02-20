@@ -1,21 +1,21 @@
 import os
+import re
 from typing import List, Tuple
 
 
 def get_matching_files(dir_original: str, dir_revised: str) -> List[Tuple[str, str]]:
     """
     โมดูลการจับคู่และเตรียมข้อมูล:
-    อ่านไฟล์จากโฟลเดอร์ต้นฉบับและโฟลเดอร์เปรียบเทียบ จัดเรียงตามลำดับพจนานุกรม
-    เพื่อรับประกันการจับคู่ที่ถูกต้องแม่นยำ
+    อ่านไฟล์จากโฟลเดอร์ต้นฉบับและโฟลเดอร์เปรียบเทียบ ดึงตัวเลข 3 หลักแรกจากชื่อไฟล์
+    และทำการจับคู่ด้วย Prefix เพื่อรับประกันความถูกต้องแทนการจัดเรียงตายตัว
 
     Returns:
         List ของ Tuple ที่บรรจุ (เส้นทางไฟล์ต้นฉบับ, เส้นทางไฟล์เปรียบเทียบ)
     """
 
-    # ดึงรายชื่อไฟล์และบังคับการจัดเรียงตามลำดับพจนานุกรม
     try:
-        files_orig = sorted(os.listdir(dir_original))
-        files_rev = sorted(os.listdir(dir_revised))
+        files_orig = os.listdir(dir_original)
+        files_rev = os.listdir(dir_revised)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"ไม่พบโฟลเดอร์ที่ระบุ: {e}")
 
@@ -23,19 +23,38 @@ def get_matching_files(dir_original: str, dir_revised: str) -> List[Tuple[str, s
     files_orig = [f for f in files_orig if f.lower().endswith(".pdf")]
     files_rev = [f for f in files_rev if f.lower().endswith(".pdf")]
 
-    # ตรวจสอบความสมบูรณ์ของชุดข้อมูล (Data Integrity Check)
-    if len(files_orig) != len(files_rev):
-        raise ValueError(
-            f"ข้อผิดพลาดทางสถาปัตยกรรม: จำนวนไฟล์ระหว่างสองแหล่งข้อมูลไม่สมดุลกัน "
-            f"(ต้นฉบับ: {len(files_orig)} ไฟล์, แก้ไข: {len(files_rev)} ไฟล์)"
-        )
+    # Regex สำหรับดึงตัวเลข 3 หลักแรกที่ปรากฏในตอนต้นของชื่อไฟล์
+    pattern = re.compile(r"^(\d{3})")
+
+    dict_orig = {}
+    for f in files_orig:
+        match = pattern.search(f)
+        if match:
+            dict_orig[match.group(1)] = f
+        else:
+            print(f"[คำเตือน] ไฟล์ต้นฉบับข้ามการตรวจสอบ (ไม่มีตัวเลข 3 หลักนำหน้า): {f}")
+
+    dict_rev = {}
+    for f in files_rev:
+        match = pattern.search(f)
+        if match:
+            dict_rev[match.group(1)] = f
+        else:
+            print(f"[คำเตือน] ไฟล์แก้ไขข้ามการตรวจสอบ (ไม่มีตัวเลข 3 หลักนำหน้า): {f}")
 
     matched_paths = []
 
-    # จับคู่ชื่อไฟล์และสร้างเส้นทางไฟล์สัมบูรณ์ (Absolute/Relative Paths)
-    for f_orig, f_rev in zip(files_orig, files_rev):
-        path_orig = os.path.join(dir_original, f_orig)
-        path_rev = os.path.join(dir_revised, f_rev)
-        matched_paths.append((path_orig, path_rev))
+    # ค้นหา keys ทั้งหมดเพื่อตรวจสอบคู่ที่ไม่สมบูรณ์
+    all_keys = set(dict_orig.keys()).union(set(dict_rev.keys()))
+
+    for key in sorted(all_keys):
+        if key in dict_orig and key in dict_rev:
+            path_orig = os.path.join(dir_original, dict_orig[key])
+            path_rev = os.path.join(dir_revised, dict_rev[key])
+            matched_paths.append((path_orig, path_rev))
+        elif key in dict_orig:
+            print(f"[คำเตือน] พบไฟล์ต้นฉบับรหัส {key} ({dict_orig[key]}) แต่ไม่พบไฟล์แก้ไขที่ตรงกัน")
+        else:
+            print(f"[คำเตือน] พบไฟล์แก้ไขรหัส {key} ({dict_rev[key]}) แต่ไม่พบไฟล์ต้นฉบับที่ตรงกัน")
 
     return matched_paths
