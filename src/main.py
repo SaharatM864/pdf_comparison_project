@@ -28,14 +28,18 @@ def process_single_pair(
     """
     ประมวลผลเอกสาร 1 คู่แบบเบ็ดเสร็จสำหรับการรันแบบ Parallel (Type-safe)
     """
+    # สกัดชื่อไฟล์เพื่อใช้เป็นหัวกระดาษ (ตัดนามสกุลออก)
     file_name = os.path.basename(path_orig)
+    pair_name = os.path.splitext(file_name)[0]
 
     # สกัดภาพจาก PDF (สมมติว่าเปรียบเทียบหน้าแรกสุดคือ page_num=0)
     img_orig = rasterize_pdf_to_image(path_orig, page_num=0, target_dpi=150)
     img_rev = rasterize_pdf_to_image(path_rev, page_num=0, target_dpi=150)
 
-    # ผสานภาพซ้ายขวา
-    integrated_image = concatenate_images_side_by_side(img_orig, img_rev)
+    # ผสานภาพซ้ายขวา พร้อมระบุชื่อคู่
+    integrated_image = concatenate_images_side_by_side(
+        img_orig, img_rev, pair_name=pair_name
+    )
 
     # ส่งคืน Index กลับไปเพื่อใช้เรียงลำดับ (Order Preservation) ให้ถูกต้องเหมือนเดิม
     return idx, integrated_image

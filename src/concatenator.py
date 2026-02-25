@@ -1,16 +1,18 @@
-from PIL import Image
-
+from PIL import Image, ImageDraw, ImageFont
+import platform
 
 def concatenate_images_side_by_side(
-    image_left: Image.Image, image_right: Image.Image
+    image_left: Image.Image, image_right: Image.Image, pair_name: str = ""
 ) -> Image.Image:
     """
     โมดูลการประมวลผลและผสานภาพ:
     คำนวณโครงสร้างและประกอบภาพสองภาพเคียงข้างกันทางแนวนอน (Side-by-side)
+    พร้อมวาดชื่อไฟล์ (pair_name) ไว้ตรงกลางด้านบน
 
     Args:
         image_left (PIL.Image): ภาพ PDF ต้นฉบับที่จะวางฝั่งซ้าย
         image_right (PIL.Image): ภาพ PDF ฉบับแก้ไขที่จะวางฝั่งขวา
+        pair_name (str): ชื่อไฟล์ที่จะแสดงบนหัวกระดาษ
 
     Returns:
         PIL.Image: ภาพผืนใหม่ที่เกิดจากการรวมทั้งสองภาพเข้าด้วยกัน
@@ -20,21 +22,54 @@ def concatenate_images_side_by_side(
     width_left, height_left = image_left.size
     width_right, height_right = image_right.size
 
+    # กำหนดพื้นที่ส่วนหัว (Header) สำหรับวาดข้อความ
+    header_height = 60 if pair_name else 0
+
     # คำนวณมิติของผืนผ้าใบใหม่
     # ความกว้าง = เอาความกว้างภาพซ้าย + ภาพขวา
     canvas_width = width_left + width_right
-    # ความสูง = ยึดตามภาพที่สูงที่สุด เพื่อป้องกันภาพโดนตัด
-    canvas_height = max(height_left, height_right)
+    # ความสูง = ยึดตามภาพที่สูงที่สุด + พื้นที่ส่วนหัว
+    canvas_height = max(height_left, height_right) + header_height
 
     # สร้างผ้าใบอิมเมจใหม่ด้วยโหมด 'RGB' (รองรับ 24-bit color) กำหนดพื้นหลังสีขาว
     combined_canvas = Image.new(
         "RGB", (canvas_width, canvas_height), color=(255, 255, 255)
     )
 
-    # วางภาพต้นฉบับฝั่งซ้าย เริ่มต้นที่จุดพิกัดกำเนิด (0, 0)
-    combined_canvas.paste(image_left, (0, 0))
+    # วางภาพต้นฉบับฝั่งซ้าย เริ่มต้นที่จุดใต้ส่วนหัว (0, header_height)
+    combined_canvas.paste(image_left, (0, header_height))
 
-    # วางภาพเปรียบเทียบฝั่งขวา เริ่มต้นที่จุดพิกัด (ความกว้างของภาพซ้าย, 0)
-    combined_canvas.paste(image_right, (width_left, 0))
+    # วางภาพเปรียบเทียบฝั่งขวา เริ่มต้นที่จุด (ความกว้างของภาพซ้าย, header_height)
+    combined_canvas.paste(image_right, (width_left, header_height))
+
+    if pair_name:
+        draw = ImageDraw.Draw(combined_canvas)
+        
+        # พยายามโหลดฟอนต์ระบบ (รองรับ Windows เป็นหลัก เนื่องจากระบบเป็น Windows)
+        try:
+            if platform.system() == "Windows":
+                font = ImageFont.truetype("arial.ttf", 18)
+            else:
+                # กรณีรันบน OS อื่นที่อาจไม่มี arial
+                font = ImageFont.load_default()
+        except IOError:
+            # ใช้ฟอนต์ปริยายหากโหลดไม่สำเร็จ
+            font = ImageFont.load_default()
+            
+        text_color = (0, 0, 0) # สีดำ
+        
+        # หักลบหาจุดกึ่งกลางของข้อความ (ใช้ textbbox สำหรับ Pillow เวอร์ชันใหม่)
+        try:
+            bbox = draw.textbbox((0, 0), pair_name, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+        except AttributeError: # เผื่อ Pillow เวอร์ชันเก่า
+            text_width, text_height = draw.textsize(pair_name, font=font)
+            
+        # พิกัด x ให้กึ่งกลาง canvas, y ให้อยู่กึ่งกลาง header
+        x = (canvas_width - text_width) // 2
+        y = (header_height - text_height) // 2
+        
+        draw.text((x, y), pair_name, font=font, fill=text_color)
 
     return combined_canvas
