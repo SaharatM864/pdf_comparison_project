@@ -1,4 +1,4 @@
-#ไลบรารีสำหรับประมวลผลการแปลง PDF เป็นภาพ (PyMuPDF)
+#ไลบรารีสำหรับประมวลผลการแปลง PDF เป็นภาพ (PyMuपनाPDF)
 
 PyMuPDF==1.27.1
 
@@ -9,3 +9,6 @@ Pillow==12.1.1
 #ไลบรารีสำหรับสร้างและจัดการไฟล์ Word (.docx)
 
 python-docx==1.2.0
+
+# GUI framework
+customtkinter==5.2.2

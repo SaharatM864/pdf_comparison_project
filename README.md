@@ -30,14 +30,18 @@ pdf_comparison_project/
 │   ├── Comparison_Report.docx
 │   └── Comparison_Report.pdf
 ├── src/
-│   ├── main.py          # 🚀 Entry Point (ไฟล์เริ่มระบบ ทำหน้าที่ควบคุม Flow ทั้งหมด)
-│   ├── matcher.py       # 🧩 ดึงรายชื่อไฟล์และค้นหาคู่อย่างปลอดภัย (ป้องกันการจับคู่ข้ามกลุ่ม)
-│   ├── rasterizer.py    # 🖨️ แปลงไฟล์ PDF เป็นภาพด้วย `fitz` ผ่าน Byte Buffer
-│   ├── concatenator.py  # ✂️ ตัดแต่งและนำภาพเข้าคู่ ผสานในรูปแบบซ้าย-ขวา
-│   └── generator.py     # 📊 Export ผลลัพธ์กลับสู่ DOCX และ PDF
+│   ├── core/            # 🧠 ส่วนประมวลผลตรรกะ (Logic & Processing)
+│   │   ├── comparison.py    # จัดการ Flow การทำงานหลัก
+│   │   ├── matcher.py       # ดึงรายชื่อไฟล์และค้นหาคู่อย่างปลอดภัย
+│   │   ├── rasterizer.py    # แปลงไฟล์ PDF เป็นภาพผ่าน Byte Buffer
+│   │   ├── concatenator.py  # ตัดแต่งและนำภาพเข้าคู่ ผสานในรูปแบบซ้าย-ขวา
+│   │   └── generator.py     # Export ผลลัพธ์กลับสู่ DOCX และ PDF
+│   └── ui/              # 🖥️ ส่วนประกอบหน้าตาหน้าต่างแอปพลิเคชัน (GUI)
+│       └── app.py           # หน้าต่างแบบสอบถาม CustomTkinter
+├── run.py               # 🚀 File หลักสำหรับเรียกใช้งานโปรแกรม (Entry Point)
 ├── .gitignore           # กฎละเว้นไฟล์สำหรับ Git
 ├── README.md            # คู่มือการติดตั้งและการใช้งานโครงการนี้ (คุณกำลังอ่านไฟล์นี้อยู่)
-└── requirements.txt     # Dependency ทั้งหมด (PyMuPDF, Pillow, python-docx)
+└── requirements.txt     # Dependency ทั้งหมด (PyMuPDF, Pillow, python-docx, customtkinter)
 ```
 
 ## 🛠️ การติดตั้ง (Installation)
@@ -67,7 +71,7 @@ pip install -r requirements.txt
 2. **สั่งรันโปรแกรม (Execution)**
    เปิด Terminal ของคุณและใช้คำสั่งจาก Root Folder:
    ```bash
-   python src/main.py
+   python run.py
    ```
 
 3. **ดำเนินการผ่าน GUI**
