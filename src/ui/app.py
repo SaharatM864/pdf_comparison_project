@@ -4,9 +4,8 @@ import threading
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
-# นำเข้าฟังก์ชันหลักจาก comparison.py และ matcher.py
 from src.core.comparison import run_comparison
-from src.core.matcher import get_matching_files
+from src.core.matcher import get_matching_files, get_sorted_single_files
 
 # ตั้งค่า Theme ของ CustomTkinter
 ctk.set_appearance_mode("Dark")  # โหมดมืดตาม Mockup
@@ -25,9 +24,12 @@ class PDFComparisonApp(ctk.CTk):
         self.dir_original = ctk.StringVar(value="")
         self.dir_revised = ctk.StringVar(value="")
         self.dpi_value = ctk.IntVar(value=150)
-        self.gen_docx = ctk.BooleanVar(value=True)
+        self.gen_docx = ctk.BooleanVar(
+            value=False
+        )  # ค่าเริ่มต้นเป็น False เพราะโหมดแรกคือ compare
         self.gen_pdf = ctk.BooleanVar(value=True)
         self.is_processing = False
+        self.op_mode = ctk.StringVar(value="compare")
 
         self._create_layout()
 
@@ -41,20 +43,36 @@ class PDFComparisonApp(ctk.CTk):
         self.left_panel = ctk.CTkFrame(self, corner_radius=15)
         self.left_panel.grid(row=0, column=0, padx=(20, 10), pady=20, sticky="nsew")
 
+        # ส่วนที่ 0: เลือกโหมดการทำงาน
+        lbl_mode = ctk.CTkLabel(
+            self.left_panel,
+            text="⚙️ โหมดการทำงาน",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        lbl_mode.pack(pady=(20, 5), padx=20, anchor="w")
+
+        self.seg_mode = ctk.CTkSegmentedButton(
+            self.left_panel,
+            values=["โหมดเปรียบเทียบ (Compare)", "โหมดรวมเอกสารเดี่ยว (Single)"],
+            command=self._on_mode_change,
+        )
+        self.seg_mode.pack(fill="x", padx=20, pady=(0, 15))
+        self.seg_mode.set("โหมดเปรียบเทียบ (Compare)")
+
         # ส่วนที่ 1: เลือกโฟลเดอร์
         lbl_folders = ctk.CTkLabel(
             self.left_panel,
             text="📁 เลือกโฟลเดอร์",
             font=ctk.CTkFont(size=18, weight="bold"),
         )
-        lbl_folders.pack(pady=(20, 10), padx=20, anchor="w")
+        lbl_folders.pack(pady=(5, 10), padx=20, anchor="w")
 
         # โฟลเดอร์ต้นฉบับ
-        self._create_folder_selector(
+        self.lbl_orig, self.entry_orig, self.btn_orig = self._create_folder_selector(
             "📂 โฟลเดอร์ต้นฉบับ (Original):", self.dir_original, self._select_orig_dir
         )
         # โฟลเดอร์แก้ไข
-        self._create_folder_selector(
+        self.lbl_rev, self.entry_rev, self.btn_rev = self._create_folder_selector(
             "📂 โฟลเดอร์แก้ไข (Revised):", self.dir_revised, self._select_rev_dir
         )
 
@@ -77,6 +95,9 @@ class PDFComparisonApp(ctk.CTk):
             command=self._update_dpi_label,
         )
         self.slider_dpi.pack(fill="x", pady=5)
+        # เริ่มต้นที่โหมด Compare ปิดใช้งาน DPI (เพราะไม่ได้ใช้เรนเดอร์ภาพแล้ว)
+        self.slider_dpi.configure(state="disabled")
+        self.lbl_dpi_val.configure(text_color="gray")
 
         # Output Format
         lbl_format = ctk.CTkLabel(self.left_panel, text="ไฟล์ผลลัพธ์:")
@@ -85,10 +106,15 @@ class PDFComparisonApp(ctk.CTk):
             self.left_panel, text="สร้างไฟล์ DOCX", variable=self.gen_docx
         )
         self.chk_docx.pack(anchor="w", padx=30, pady=5)
+        # เริ่มต้นโหมด Compare: บังคับปิด DOCX
+        self.chk_docx.configure(state="disabled")
+
         self.chk_pdf = ctk.CTkCheckBox(
             self.left_panel, text="สร้างไฟล์ PDF", variable=self.gen_pdf
         )
         self.chk_pdf.pack(anchor="w", padx=30, pady=5)
+        # บังคับเลือก PDF ไว้เสมอ
+        self.chk_pdf.configure(state="disabled")
 
         # Spacer
         ctk.CTkLabel(self.left_panel, text="").pack(expand=True)
@@ -161,9 +187,8 @@ class PDFComparisonApp(ctk.CTk):
         self.log_textbox.pack(fill="both", expand=True, padx=15, pady=10)
 
     def _create_folder_selector(self, label_text, string_var, command):
-        ctk.CTkLabel(self.left_panel, text=label_text).pack(
-            anchor="w", padx=20, pady=(5, 0)
-        )
+        lbl = ctk.CTkLabel(self.left_panel, text=label_text)
+        lbl.pack(anchor="w", padx=20, pady=(5, 0))
 
         frm = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         frm.pack(fill="x", padx=20, pady=5)
@@ -178,6 +203,7 @@ class PDFComparisonApp(ctk.CTk):
 
         btn = ctk.CTkButton(frm, text="Browse", width=60, command=command)
         btn.pack(side="right")
+        return lbl, entry, btn
 
     def _select_orig_dir(self):
         folder = filedialog.askdirectory(title="เลือกโฟลเดอร์เอกสารต้นฉบับ")
@@ -194,45 +220,93 @@ class PDFComparisonApp(ctk.CTk):
     def _update_dpi_label(self, val):
         self.lbl_dpi_val.configure(text=f"ความละเอียด (DPI): {int(val)}")
 
+    def _on_mode_change(self, value):
+        if value == "โหมดรวมเอกสารเดี่ยว (Single)":
+            self.op_mode.set("single")
+
+            # ปิดปุ่มเลือกโฟลเดอร์เปรียบเทียบ
+            self.btn_rev.configure(state="disabled")
+            self.lbl_rev.configure(text_color="gray")
+        else:
+            self.op_mode.set("compare")
+
+            # เปิดให้ใช้ปุ่มเอกสารแก้ไขอีกครั้ง
+            self.btn_rev.configure(state="normal")
+            self.lbl_rev.configure(text_color=["#000000", "#FFFFFF"])
+
+        self._update_matching_table()
+
     def _update_matching_table(self):
         orig = self.dir_original.get()
         rev = self.dir_revised.get()
+        mode = self.op_mode.get()
 
         self.table_textbox.configure(state="normal")
         self.table_textbox.delete("1.0", "end")
 
-        if orig and rev:
-            try:
-                matched_files = get_matching_files(orig, rev)
-                total = len(matched_files)
+        if mode == "single":
+            if orig:
+                try:
+                    single_files = get_sorted_single_files(orig)
+                    total = len(single_files)
 
-                header = f"{'NO.':<5} | {'ORIGINAL FILE':<40} | {'REVISED FILE':<40}\n"
-                separator = "-" * 90 + "\n"
+                    header = f"{'NO.':<5} | {'FILE NAME':<80}\n"
+                    separator = "-" * 90 + "\n"
 
-                self.table_textbox.insert("end", f"พบการจับคู่ {total} คู่\n\n")
-                self.table_textbox.insert("end", header)
-                self.table_textbox.insert("end", separator)
+                    self.table_textbox.insert("end", f"พบเอกสารทั้งหมด {total} ไฟล์\n\n")
+                    self.table_textbox.insert("end", header)
+                    self.table_textbox.insert("end", separator)
 
-                for idx, (path_orig, path_rev) in enumerate(matched_files):
-                    name_o = os.path.basename(path_orig)
-                    if len(name_o) > 38:
-                        name_o = name_o[:35] + "..."
+                    for idx, path in enumerate(single_files):
+                        name = os.path.basename(path)
+                        if len(name) > 75:
+                            name = name[:72] + "..."
 
-                    name_r = os.path.basename(path_rev)
-                    if len(name_r) > 38:
-                        name_r = name_r[:35] + "..."
+                        row = f"{idx+1:<5} | {name:<80}\n"
+                        self.table_textbox.insert("end", row)
 
-                    row = f"{idx+1:<5} | {name_o:<40} | {name_r:<40}\n"
-                    self.table_textbox.insert("end", row)
+                except Exception as e:
+                    self.table_textbox.insert(
+                        "end", f"เกิดข้อผิดพลาดในการอ่านโฟลเดอร์:\n{str(e)}"
+                    )
+            else:
+                self.table_textbox.insert("end", "กรุณาเลือกโฟลเดอร์ต้นฉบับ เพื่อดูรายการไฟล์")
 
-            except Exception as e:
-                self.table_textbox.insert(
-                    "end", f"เกิดข้อผิดพลาดในการอ่านโฟลเดอร์:\n{str(e)}"
-                )
         else:
-            self.table_textbox.insert(
-                "end", "กรุณาเลือกโฟลเดอร์ทั้ง ต้นฉบับ และ แก้ไข เพื่อดูรายการจับคู่"
-            )
+            if orig and rev:
+                try:
+                    matched_files = get_matching_files(orig, rev)
+                    total = len(matched_files)
+
+                    header = (
+                        f"{'NO.':<5} | {'ORIGINAL FILE':<40} | {'REVISED FILE':<40}\n"
+                    )
+                    separator = "-" * 90 + "\n"
+
+                    self.table_textbox.insert("end", f"พบการจับคู่ {total} คู่\n\n")
+                    self.table_textbox.insert("end", header)
+                    self.table_textbox.insert("end", separator)
+
+                    for idx, (path_orig, path_rev) in enumerate(matched_files):
+                        name_o = os.path.basename(path_orig)
+                        if len(name_o) > 38:
+                            name_o = name_o[:35] + "..."
+
+                        name_r = os.path.basename(path_rev)
+                        if len(name_r) > 38:
+                            name_r = name_r[:35] + "..."
+
+                        row = f"{idx+1:<5} | {name_o:<40} | {name_r:<40}\n"
+                        self.table_textbox.insert("end", row)
+
+                except Exception as e:
+                    self.table_textbox.insert(
+                        "end", f"เกิดข้อผิดพลาดในการอ่านโฟลเดอร์:\n{str(e)}"
+                    )
+            else:
+                self.table_textbox.insert(
+                    "end", "กรุณาเลือกโฟลเดอร์ทั้ง ต้นฉบับ และ แก้ไข เพื่อดูรายการจับคู่"
+                )
 
         self.table_textbox.configure(state="disabled")
 
@@ -263,10 +337,16 @@ class PDFComparisonApp(ctk.CTk):
         # Validate
         orig = self.dir_original.get()
         rev = self.dir_revised.get()
+        mode = self.op_mode.get()
 
-        if not orig or not rev:
-            messagebox.showwarning("คำเตือน", "กรุณาเลือกอโฟลเดอร์ให้ครบตั้งสองฝั่ง")
-            return
+        if mode == "compare":
+            if not orig or not rev:
+                messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ให้ครบทั้งสองฝั่ง")
+                return
+        else:
+            if not orig:
+                messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ต้นฉบับ")
+                return
 
         if not self.gen_docx.get() and not self.gen_pdf.get():
             messagebox.showwarning(
@@ -293,6 +373,7 @@ class PDFComparisonApp(ctk.CTk):
             "dir_original": orig,
             "dir_revised": rev,
             "output_dir": output_dir,
+            "mode": mode,
             "target_dpi": int(self.dpi_value.get()),
             "page_num": 0,
             "generate_docx_flag": self.gen_docx.get(),
