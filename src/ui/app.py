@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox
 
 from src.core.comparison import run_comparison
 from src.core.matcher import get_matching_files, get_sorted_single_files
+from src.core.renamer import rename_ddm_files, get_rename_preview
 
 # ตั้งค่า Theme ของ CustomTkinter
 ctk.set_appearance_mode("Dark")  # โหมดมืดตาม Mockup
@@ -30,6 +31,7 @@ class PDFComparisonApp(ctk.CTk):
         self.gen_pdf = ctk.BooleanVar(value=True)
         self.is_processing = False
         self.op_mode = ctk.StringVar(value="compare")
+        self.doc_type_var = ctk.StringVar(value="etax")
 
         self._create_layout()
 
@@ -40,7 +42,7 @@ class PDFComparisonApp(ctk.CTk):
         self.grid_columnconfigure(1, weight=7)  # แผงขวา 70%
 
         # ==================== แผงด้านซ้าย (Left Panel) ====================
-        self.left_panel = ctk.CTkFrame(self, corner_radius=15)
+        self.left_panel = ctk.CTkScrollableFrame(self, corner_radius=15)
         self.left_panel.grid(row=0, column=0, padx=(20, 10), pady=20, sticky="nsew")
 
         # ส่วนที่ 0: เลือกโหมดการทำงาน
@@ -53,11 +55,11 @@ class PDFComparisonApp(ctk.CTk):
 
         self.seg_mode = ctk.CTkSegmentedButton(
             self.left_panel,
-            values=["โหมดเปรียบเทียบ (Compare)", "โหมดรวมเอกสารเดี่ยว (Single)"],
+            values=["เปรียบเทียบ (Compare)", "รวมเอกสาร (Single)", "Rename PDF"],
             command=self._on_mode_change,
         )
         self.seg_mode.pack(fill="x", padx=20, pady=(0, 15))
-        self.seg_mode.set("โหมดเปรียบเทียบ (Compare)")
+        self.seg_mode.set("เปรียบเทียบ (Compare)")
 
         # ส่วนที่ 1: เลือกโฟลเดอร์
         lbl_folders = ctk.CTkLabel(
@@ -116,8 +118,57 @@ class PDFComparisonApp(ctk.CTk):
         # บังคับเลือก PDF ไว้เสมอ
         self.chk_pdf.configure(state="disabled")
 
-        # Spacer
-        ctk.CTkLabel(self.left_panel, text="").pack(expand=True)
+        # ส่วนที่ 2.5: เลือกประเภทเอกสาร (สำหรับโหมด Rename เท่านั้น)
+        self.frm_doc_container = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        self.frm_doc_container.pack(fill="x", padx=0, pady=0)
+
+        self.frm_doc_type = ctk.CTkFrame(self.frm_doc_container, fg_color="transparent")
+        self.frm_doc_type.pack(fill="x", padx=20, pady=(15, 0))
+
+        self.lbl_doc_type = ctk.CTkLabel(
+            self.frm_doc_type,
+            text="📝 ประเภทเอกสาร:",
+            font=ctk.CTkFont(size=14),
+        )
+        self.lbl_doc_type.pack(anchor="w", pady=(0, 5))
+
+        self.rb_etax = ctk.CTkRadioButton(
+            self.frm_doc_type,
+            text="e-Tax  (Prefix_ID1_ID2_ID3_..._S.pdf)",
+            variable=self.doc_type_var,
+            value="etax",
+            command=self._update_matching_table,
+        )
+        self.rb_etax.pack(anchor="w", padx=10, pady=2)
+
+        self.rb_smart = ctk.CTkRadioButton(
+            self.frm_doc_type,
+            text="Smart Invoice  (Prefix_ID.pdf)",
+            variable=self.doc_type_var,
+            value="smart_invoice",
+            command=self._update_matching_table,
+        )
+        self.rb_smart.pack(anchor="w", padx=10, pady=2)
+
+        # เพิ่มข้อความอธิบายเงื่อนไขการจับคู่ (Matching detection)
+        self.lbl_matching_info = ctk.CTkLabel(
+            self.frm_doc_type,
+            text=(
+                "ℹ️ เงื่อนไขการจับคู่ (Match Detect):\n"
+                "• e-Tax: จับคู่ด้วย 3 กลุ่มแรกหลัง Prefix (ID1_ID2_ID3)\n"
+                "  และอักขระท้ายสุด (Suffix)\n"
+                "• Smart Invoice: จับคู่ด้วยชื่อไฟล์หลัง Prefix_ (ID.pdf)"
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color="gray",
+            justify="left",
+        )
+        self.lbl_matching_info.pack(anchor="w", padx=10, pady=(10, 0))
+
+        # ซ่อนส่วนเลือกประเภทเอกสารเมื่อเริ่มต้น (ไม่ได้อยู่โหมด Rename)
+        self.frm_doc_type.pack_forget()
+
+
 
         # ส่วนที่ 3: ปุ่มทำงาน
         self.btn_compare = ctk.CTkButton(
@@ -221,18 +272,39 @@ class PDFComparisonApp(ctk.CTk):
         self.lbl_dpi_val.configure(text=f"ความละเอียด (DPI): {int(val)}")
 
     def _on_mode_change(self, value):
-        if value == "โหมดรวมเอกสารเดี่ยว (Single)":
+        if value == "รวมเอกสาร (Single)":
             self.op_mode.set("single")
-
             # ปิดปุ่มเลือกโฟลเดอร์เปรียบเทียบ
             self.btn_rev.configure(state="disabled")
             self.lbl_rev.configure(text_color="gray")
+            # ซ่อน doc_type, แสดง settings
+            self.frm_doc_type.pack_forget()
+            self.lbl_orig.configure(text="📂 โฟลเดอร์ต้นฉบับ (Original):")
+            self.lbl_rev.configure(text="📂 โฟลเดอร์แก้ไข (Revised):")
+            self.btn_compare.configure(text="🚀 เริ่มเปรียบเทียบ")
+
+        elif value == "Rename PDF":
+            self.op_mode.set("rename")
+            # เปิดปุ่มเลือกโฟลเดอร์ทั้ง 2
+            self.btn_rev.configure(state="normal")
+            self.lbl_rev.configure(text_color=["#000000", "#FFFFFF"])
+            # เปลี่ยน label โฟลเดอร์ให้เข้าใจง่าย
+            self.lbl_orig.configure(text="📂 โฟลเดอร์ต้นฉบับ (Source):")
+            self.lbl_rev.configure(text="📂 โฟลเดอร์ปลายทาง (DDM):")
+            # แสดง doc_type RadioButton
+            self.frm_doc_type.pack(fill="x", padx=20, pady=(15, 0))
+            self.btn_compare.configure(text="🚀 เริ่ม Rename")
+
         else:
             self.op_mode.set("compare")
-
             # เปิดให้ใช้ปุ่มเอกสารแก้ไขอีกครั้ง
             self.btn_rev.configure(state="normal")
             self.lbl_rev.configure(text_color=["#000000", "#FFFFFF"])
+            # ซ่อน doc_type, คืน label
+            self.frm_doc_type.pack_forget()
+            self.lbl_orig.configure(text="📂 โฟลเดอร์ต้นฉบับ (Original):")
+            self.lbl_rev.configure(text="📂 โฟลเดอร์แก้ไข (Revised):")
+            self.btn_compare.configure(text="🚀 เริ่มเปรียบเทียบ")
 
         self._update_matching_table()
 
@@ -272,7 +344,49 @@ class PDFComparisonApp(ctk.CTk):
             else:
                 self.table_textbox.insert("end", "กรุณาเลือกโฟลเดอร์ต้นฉบับ เพื่อดูรายการไฟล์")
 
-        else:
+        elif mode == "rename":
+            if orig and rev:
+                try:
+                    doc_type = self.doc_type_var.get()
+                    preview = get_rename_preview(orig, rev, doc_type)
+                    total = len(preview)
+
+                    doc_label = "e-Tax" if doc_type == "etax" else "Smart Invoice"
+                    header = f"{'NO.':<5} | {'ชื่อเดิม':<40} | {'ชื่อใหม่':<40}\n"
+                    separator = "-" * 90 + "\n"
+
+                    self.table_textbox.insert(
+                        "end", f"[{doc_label}] พบไฟล์ที่จะ Rename {total} ไฟล์\n\n"
+                    )
+                    self.table_textbox.insert("end", header)
+                    self.table_textbox.insert("end", separator)
+
+                    for idx, (old_name, new_name) in enumerate(preview):
+                        old_disp = (
+                            old_name if len(old_name) <= 38 else old_name[:35] + "..."
+                        )
+                        new_disp = (
+                            new_name if len(new_name) <= 38 else new_name[:35] + "..."
+                        )
+                        row = f"{idx+1:<5} | {old_disp:<40} | {new_disp:<40}\n"
+                        self.table_textbox.insert("end", row)
+
+                    if total == 0:
+                        self.table_textbox.insert(
+                            "end",
+                            "ไม่พบไฟล์ที่ต้องเปลี่ยนชื่อ (อาจ Rename ไปแล้ว หรือไม่ตรงกับ Mapping)",
+                        )
+
+                except Exception as e:
+                    self.table_textbox.insert(
+                        "end", f"เกิดข้อผิดพลาดในการอ่านโฟลเดอร์:\n{str(e)}"
+                    )
+            else:
+                self.table_textbox.insert(
+                    "end", "กรุณาเลือกโฟลเดอร์ทั้ง Source และ DDM เพื่อดูรายการไฟล์"
+                )
+
+        else:  # compare
             if orig and rev:
                 try:
                     matched_files = get_matching_files(orig, rev)
@@ -343,12 +457,16 @@ class PDFComparisonApp(ctk.CTk):
             if not orig or not rev:
                 messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ให้ครบทั้งสองฝั่ง")
                 return
-        else:
+        elif mode == "rename":
+            if not orig or not rev:
+                messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ทั้ง Source และ DDM")
+                return
+        else:  # single
             if not orig:
                 messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ต้นฉบับ")
                 return
 
-        if not self.gen_docx.get() and not self.gen_pdf.get():
+        if mode != "rename" and not self.gen_docx.get() and not self.gen_pdf.get():
             messagebox.showwarning(
                 "คำเตือน", "กรุณาเลือกรูปแบบ Output อย่างน้อย 1 รูปแบบ (DOCX หรือ PDF)"
             )
@@ -363,27 +481,47 @@ class PDFComparisonApp(ctk.CTk):
         self.progress_bar.set(0)
         self.lbl_progress.configure(text="เริ่มการทำงาน...")
 
-        # Prepare params
-        output_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "output")
-        )
-        os.makedirs(output_dir, exist_ok=True)
+        if mode == "rename":
+            # โหมด Rename: ใช้ renamer module
+            doc_type = self.doc_type_var.get()
+            threading.Thread(
+                target=self._run_rename_task,
+                args=(orig, rev, doc_type),
+                daemon=True,
+            ).start()
+        else:
+            # โหมด Compare / Single: ใช้ comparison module
+            output_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "output")
+            )
+            os.makedirs(output_dir, exist_ok=True)
 
-        params = {
-            "dir_original": orig,
-            "dir_revised": rev,
-            "output_dir": output_dir,
-            "mode": mode,
-            "target_dpi": int(self.dpi_value.get()),
-            "page_num": 0,
-            "generate_docx_flag": self.gen_docx.get(),
-            "generate_pdf_flag": self.gen_pdf.get(),
-            "progress_callback": self.update_progress,
-            "log_callback": self.log,
-        }
+            params = {
+                "dir_original": orig,
+                "dir_revised": rev,
+                "output_dir": output_dir,
+                "mode": mode,
+                "target_dpi": int(self.dpi_value.get()),
+                "page_num": 0,
+                "generate_docx_flag": self.gen_docx.get(),
+                "generate_pdf_flag": self.gen_pdf.get(),
+                "progress_callback": self.update_progress,
+                "log_callback": self.log,
+            }
 
-        # รันใน Thread แยกเพื่อไม่ให้ GUI ค้าง
-        threading.Thread(target=self._run_task, kwargs=params, daemon=True).start()
+            # รันใน Thread แยกเพื่อไม่ให้ GUI ค้าง
+            threading.Thread(target=self._run_task, kwargs=params, daemon=True).start()
+
+    def _run_rename_task(self, source_dir, dest_dir, doc_type):
+        """รัน Rename ใน Thread แยก"""
+        try:
+            result = rename_ddm_files(
+                source_dir, dest_dir, doc_type, log_callback=self.log
+            )
+            self.after(0, self._on_rename_complete, result)
+        except Exception as e:
+            self.log(f"[ข้อผิดพลาดร้ายแรง] {e}")
+            self.after(0, self._on_rename_complete, None)
 
     def _run_task(self, **kwargs):
         try:
@@ -393,9 +531,41 @@ class PDFComparisonApp(ctk.CTk):
             self.log(f"[ข้อผิดพลาดร้ายแรง] {e}")
             self.after(0, self._on_task_complete, False)
 
+    def _on_rename_complete(self, result):
+        """Callback เมื่อ Rename เสร็จ"""
+        self.is_processing = False
+        self.btn_compare.configure(state="normal", text="🚀 เริ่ม Rename")
+
+        if result:
+            self.lbl_progress.configure(
+                text=f"✅ สำเร็จ {result['success']} ไฟล์ | ❌ ล้มเหลว {result['error']} ไฟล์"
+            )
+            self.progress_bar.set(1.0)
+            if result["error"] == 0:
+                messagebox.showinfo(
+                    "สำเร็จ",
+                    f"เปลี่ยนชื่อไฟล์สำเร็จทั้งหมด {result['success']} ไฟล์\n"
+                    f"(ข้ามไฟล์ที่เคย Rename แล้ว {result['skipped']} ไฟล์)",
+                )
+            else:
+                messagebox.showwarning(
+                    "เสร็จสิ้น (มีข้อผิดพลาด)",
+                    f"สำเร็จ {result['success']} ไฟล์ / ล้มเหลว {result['error']} ไฟล์\n"
+                    f"กรุณาดูรายละเอียดใน Log Console",
+                )
+            # อัพเดทตาราง Preview ใหม่หลัง Rename
+            self._update_matching_table()
+        else:
+            self.lbl_progress.configure(text="❌ เกิดข้อผิดพลาด")
+            messagebox.showerror(
+                "ผิดพลาด", "การ Rename ล้มเหลว กรุณาดูรายละเอียดใน Log Console"
+            )
+
     def _on_task_complete(self, success):
         self.is_processing = False
-        self.btn_compare.configure(state="normal", text="🚀 เริ่มเปรียบเทียบ")
+        mode = self.op_mode.get()
+        btn_text = "🚀 เริ่ม Rename" if mode == "rename" else "🚀 เริ่มเปรียบเทียบ"
+        self.btn_compare.configure(state="normal", text=btn_text)
 
         if success:
             self.lbl_progress.configure(text="✅ สำเร็จ! เปิดดูผลลัพธ์ในโฟลเดอร์ output")
