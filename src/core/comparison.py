@@ -54,7 +54,11 @@ def process_single_pair(
     """
     try:
         # สกัดชื่อไฟล์เพื่อใช้เป็นหัวกระดาษ (ตัดนามสกุลออก)
-        file_name = os.path.basename(path_orig)
+        available_path = path_orig or path_rev
+        if not available_path:
+            raise ValueError("ไม่มีไฟล์สำหรับประมวลผล")
+            
+        file_name = os.path.basename(available_path)
         pair_name = os.path.splitext(file_name)[0]
 
         # ผสาน PDF ซ้ายขวา พร้อมระบุชื่อคู่ (จะได้ fitz.Document)
@@ -80,6 +84,7 @@ def run_comparison(
     generate_pdf_flag: bool = True,
     progress_callback=None,
     log_callback=None,
+    allow_unmatched: bool = False,
 ) -> bool:
     """
     ฟังก์ชันหลักที่ทำการเรียบเรียงเอกสาร
@@ -108,9 +113,13 @@ def run_comparison(
         else:
             # ระยะที่ 1: ดึงและจับคู่ไฟล์
             log("\n[ขั้นตอน 1] กำลังค้นหาและจับคู่ไฟล์เอกสาร (โหมดเปรียบเทียบ)...")
-            files_to_process = get_matching_files(dir_original, dir_revised)
+            files_to_process = get_matching_files(dir_original, dir_revised, allow_unmatched)
             total_items = len(files_to_process)
-            log(f"\nพบเอกสารที่จับคู่ได้สมบูรณ์ทั้งหมด: {total_items} คู่ ({total_items * 2} ไฟล์)")
+            
+            # นับจำนวนรายการเพื่อแสดง log ให้ชัดเจน (จับคู่/ฝั่งเดียว)
+            matched = sum(1 for p1, p2 in files_to_process if p1 and p2)
+            unmatched = total_items - matched
+            log(f"\nพบการจับคู่สมบูรณ์ {matched} คู่ และพบไฟล์ฝั่งเดียว {unmatched} ไฟล์ (รวม {total_items} รายการ)")
 
             if total_items == 0:
                 log("ไม่พบไฟล์ที่จับคู่ได้ กรุณาตรวจสอบรหัสเอกสาร หรือตรวจว่าเลือกไฟล์ถูกโฟลเดอร์หรือไม่")

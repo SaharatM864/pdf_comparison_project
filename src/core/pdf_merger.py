@@ -72,31 +72,39 @@ def merge_pdfs_side_by_side(
     ผสานหน้าแรกของ PDF สองไฟล์เข้าด้วยกันแบบเคียงข้าง (Side-by-side)
     โดยรักษาความเป็น Vector Text ของเอกสารเดิมไว้ทั้งหมด
     และเผื่อพื้นที่ด้านบนสำหรับเขียนชื่อไฟล์ (pair_name)
+    รองรับกรณีที่มีแต่ไฟล์ต้นฉบับ หรือมีแต่ไฟล์แก้ไข
 
     Args:
-        path_orig (str): เส้นทางไปยังไฟล์ PDF ต้นฉบับ
-        path_rev (str): เส้นทางไปยังไฟล์ PDF ฉบับแก้ไข
+        path_orig (str|None): เส้นทางไปยังไฟล์ PDF ต้นฉบับ
+        path_rev (str|None): เส้นทางไปยังไฟล์ PDF ฉบับแก้ไข
         pair_name (str): ชื่อไฟล์คู่ที่จะแสดงเป็น Header
 
     Returns:
         fitz.Document: ออบเจ็กต์เอกสาร PDF ใหม่ที่เกิดจากการผสาน (ยังค้างในหน่วยความจำ ยังไม่ได้ save)
     """
+    
+    if path_orig is None and path_rev is None:
+        raise ValueError("ต้องระบุไฟล์อย่างน้อยหนึ่งไฟล์")
 
-    # เปิดไฟล์ทั้งสอง
-    doc_left = fitz.open(path_orig)
-    doc_right = fitz.open(path_rev)
+    # เปิดไฟล์เฉพาะกรณีที่มีเส้นทางไฟล์
+    doc_left = fitz.open(path_orig) if path_orig else None
+    doc_right = fitz.open(path_rev) if path_rev else None
 
     try:
         # สมมติว่าต้องการเปรียบเทียบแค่หน้าแรก (page 0)
-        page_left = doc_left[0]
-        page_right = doc_right[0]
+        page_left = doc_left[0] if doc_left else None
+        page_right = doc_right[0] if doc_right else None
 
-        # ดึงขนาดกระดาษ
-        rect_left = page_left.rect
-        rect_right = page_right.rect
-
-        width_left, height_left = rect_left.width, rect_left.height
-        width_right, height_right = rect_right.width, rect_right.height
+        # หาค่าขนาดจาก file ที่มีอยู่เพื่อใช้เป็นฐาน
+        base_page = page_left if page_left else page_right
+        base_rect = base_page.rect
+        
+        # ถ่ายทอดขนาดไปยังฝั่งซ้าย/ขวา
+        width_left = page_left.rect.width if page_left else base_rect.width
+        height_left = page_left.rect.height if page_left else base_rect.height
+        
+        width_right = page_right.rect.width if page_right else base_rect.width
+        height_right = page_right.rect.height if page_right else base_rect.height
 
         # พื้นที่ความสูงของ Header
         header_height = 50 if pair_name else 0
@@ -112,19 +120,21 @@ def merge_pdfs_side_by_side(
         new_page = doc_merged.new_page(width=canvas_width, height=canvas_height)
 
         # วาดเนื้อหาจากหน้าต้นฉบับฝั่งซ้าย (เลื่อนหน้าลงมาเท่ากับระยะ header_height)
-        dest_rect_left = fitz.Rect(
-            0, header_height, width_left, header_height + height_left
-        )
-        new_page.show_pdf_page(dest_rect_left, doc_left, 0)
+        if page_left:
+            dest_rect_left = fitz.Rect(
+                0, header_height, width_left, header_height + height_left
+            )
+            new_page.show_pdf_page(dest_rect_left, doc_left, 0)
 
         # วาดเนื้อหาจากหน้าเปรียบเทียบฝั่งขวา (เลื่อน x ไปทางขวา = width_left)
-        dest_rect_right = fitz.Rect(
-            width_left,
-            header_height,
-            width_left + width_right,
-            header_height + height_right,
-        )
-        new_page.show_pdf_page(dest_rect_right, doc_right, 0)
+        if page_right:
+            dest_rect_right = fitz.Rect(
+                width_left,
+                header_height,
+                width_left + width_right,
+                header_height + height_right,
+            )
+            new_page.show_pdf_page(dest_rect_right, doc_right, 0)
 
         # พิมพ์ข้อความชื่อไฟล์ด้านบน
         if pair_name:
@@ -153,5 +163,7 @@ def merge_pdfs_side_by_side(
 
     finally:
         # ปิดไฟล์เพื่อคืนหน่วยความจำ (ไฟล์ปลายทาง doc_merged ยังเปิดอยู่เพื่อนำไปใช้ต่อ)
-        doc_left.close()
-        doc_right.close()
+        if doc_left:
+            doc_left.close()
+        if doc_right:
+            doc_right.close()

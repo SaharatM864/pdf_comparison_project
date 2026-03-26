@@ -47,7 +47,8 @@ class PDFComparisonApp(ctk.CTk):
         rev = self.left_panel.dir_revised.get()
         mode = self.left_panel.op_mode.get()
         doc_type = self.left_panel.doc_type_var.get()
-        self.right_panel.update_table(orig, rev, mode, doc_type)
+        allow_unmatched = self.left_panel.allow_unmatched.get()
+        self.right_panel.update_table(orig, rev, mode, doc_type, allow_unmatched)
 
     def _start_comparison(self):
         if self.is_processing: 
@@ -56,10 +57,17 @@ class PDFComparisonApp(ctk.CTk):
         orig = self.left_panel.dir_original.get()
         rev = self.left_panel.dir_revised.get()
         mode = self.left_panel.op_mode.get()
+        allow_unmatched = self.left_panel.allow_unmatched.get()
         
-        if mode == "compare" and (not orig or not rev):
-            messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ให้ครบทั้งสองฝั่ง")
-            return
+        if mode == "compare":
+            if allow_unmatched:
+                if not orig and not rev:
+                    messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์อย่างน้อย 1 ฝั่ง")
+                    return
+            else:
+                if not orig or not rev:
+                    messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ให้ครบทั้งสองฝั่ง")
+                    return
         elif mode == "rename" and (not orig or not rev):
             messagebox.showwarning("คำเตือน", "กรุณาเลือกโฟลเดอร์ทั้ง Source และ DDM")
             return
@@ -102,6 +110,7 @@ class PDFComparisonApp(ctk.CTk):
                 "generate_pdf_flag": gen_pdf,
                 "progress_callback": self.right_panel.update_progress,
                 "log_callback": self.right_panel.log,
+                "allow_unmatched": allow_unmatched,
             }
             threading.Thread(target=self._run_task, kwargs=params, daemon=True).start()
 

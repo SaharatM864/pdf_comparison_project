@@ -39,7 +39,7 @@ def get_sorted_single_files(dir_path: str) -> List[str]:
     return sorted_paths
 
 
-def get_matching_files(dir_original: str, dir_revised: str) -> List[Tuple[str, str]]:
+def get_matching_files(dir_original: str, dir_revised: str, allow_unmatched: bool = False) -> List[Tuple[str, str]]:
     """
     โมดูลการจับคู่และเตรียมข้อมูล:
     อ่านไฟล์จากโฟลเดอร์ต้นฉบับและโฟลเดอร์เปรียบเทียบ ดึงตัวเลข 3 หลักแรกจากชื่อไฟล์
@@ -47,11 +47,12 @@ def get_matching_files(dir_original: str, dir_revised: str) -> List[Tuple[str, s
 
     Returns:
         List ของ Tuple ที่บรรจุ (เส้นทางไฟล์ต้นฉบับ, เส้นทางไฟล์เปรียบเทียบ)
+        หาก allow_unmatched=True ฝั่งที่ไม่มีเอกสารจะได้ค่า None
     """
 
     try:
-        files_orig = os.listdir(dir_original)
-        files_rev = os.listdir(dir_revised)
+        files_orig = os.listdir(dir_original) if dir_original else []
+        files_rev = os.listdir(dir_revised) if dir_revised else []
     except FileNotFoundError as e:
         raise FileNotFoundError(f"ไม่พบโฟลเดอร์ที่ระบุ: {e}")
 
@@ -89,10 +90,18 @@ def get_matching_files(dir_original: str, dir_revised: str) -> List[Tuple[str, s
             path_rev = os.path.join(dir_revised, dict_rev[key])
             matched_paths.append((path_orig, path_rev))
         elif key in dict_orig:
-            print(
-                f"[คำเตือน] พบไฟล์ต้นฉบับรหัส {key} ({dict_orig[key]}) แต่ไม่พบไฟล์แก้ไขที่ตรงกัน"
-            )
+            if allow_unmatched:
+                path_orig = os.path.join(dir_original, dict_orig[key])
+                matched_paths.append((path_orig, None))
+            else:
+                print(
+                    f"[คำเตือน] พบไฟล์ต้นฉบับรหัส {key} ({dict_orig[key]}) แต่ไม่พบไฟล์แก้ไขที่ตรงกัน"
+                )
         else:
-            print(f"[คำเตือน] พบไฟล์แก้ไขรหัส {key} ({dict_rev[key]}) แต่ไม่พบไฟล์ต้นฉบับที่ตรงกัน")
+            if allow_unmatched:
+                path_rev = os.path.join(dir_revised, dict_rev[key])
+                matched_paths.append((None, path_rev))
+            else:
+                print(f"[คำเตือน] พบไฟล์แก้ไขรหัส {key} ({dict_rev[key]}) แต่ไม่พบไฟล์ต้นฉบับที่ตรงกัน")
 
     return matched_paths

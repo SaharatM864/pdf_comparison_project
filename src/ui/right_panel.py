@@ -65,8 +65,8 @@ class RightPanel(ctk.CTkFrame):
         )
         self.log_textbox.pack(fill="both", expand=True, padx=15, pady=10)
 
-    def update_table(self, orig, rev, mode, doc_type):
-        """จัดการดึงข้อมูลมาแสดงໃນตาราง"""
+    def update_table(self, orig, rev, mode, doc_type, allow_unmatched=False):
+        """จัดการดึงข้อมูลมาแสดงในตาราง"""
         self.table_textbox.configure(state="normal")
         self.table_textbox.delete("1.0", "end")
 
@@ -125,26 +125,35 @@ class RightPanel(ctk.CTkFrame):
                 self.table_textbox.insert("end", "กรุณาเลือกโฟลเดอร์ทั้ง Source และ DDM เพื่อดูรายการไฟล์")
 
         else:  # compare
-            if orig and rev:
+            if orig or rev:  # ผ่อนปรนหากมีเพียง 1 ก็ทำงานได้
                 try:
-                    matched_files = get_matching_files(orig, rev)
+                    matched_files = get_matching_files(orig, rev, allow_unmatched=allow_unmatched)
                     total = len(matched_files)
+                    
+                    matched = sum(1 for p1, p2 in matched_files if p1 and p2)
+                    unmatched = total - matched
 
                     header = f"{'NO.':<5} | {'ORIGINAL FILE':<40} | {'REVISED FILE':<40}\n"
                     separator = "-" * 90 + "\n"
 
-                    self.table_textbox.insert("end", f"พบการจับคู่ {total} คู่\n\n")
+                    self.table_textbox.insert("end", f"พบรายการทั้งหมด {total} รายการ ({matched} จับคู่สมบูรณ์ / {unmatched} ฝั่งเดียว)\n\n")
                     self.table_textbox.insert("end", header)
                     self.table_textbox.insert("end", separator)
 
                     for idx, (path_orig, path_rev) in enumerate(matched_files):
-                        name_o = os.path.basename(path_orig)
-                        if len(name_o) > 38:
-                            name_o = name_o[:35] + "..."
+                        if path_orig:
+                            name_o = os.path.basename(path_orig)
+                            if len(name_o) > 38:
+                                name_o = name_o[:35] + "..."
+                        else:
+                            name_o = "— (ไม่มีเอกสาร) —"
 
-                        name_r = os.path.basename(path_rev)
-                        if len(name_r) > 38:
-                            name_r = name_r[:35] + "..."
+                        if path_rev:
+                            name_r = os.path.basename(path_rev)
+                            if len(name_r) > 38:
+                                name_r = name_r[:35] + "..."
+                        else:
+                            name_r = "— (ไม่มีเอกสาร) —"
 
                         row = f"{idx+1:<5} | {name_o:<40} | {name_r:<40}\n"
                         self.table_textbox.insert("end", row)
@@ -152,7 +161,9 @@ class RightPanel(ctk.CTkFrame):
                 except Exception as e:
                     self.table_textbox.insert("end", f"เกิดข้อผิดพลาดในการอ่านโฟลเดอร์:\n{str(e)}")
             else:
-                self.table_textbox.insert("end", "กรุณาเลือกโฟลเดอร์ทั้ง ต้นฉบับ และ แก้ไข เพื่อดูรายการจับคู่")
+                self.table_textbox.insert("end", "กรุณาเลือกโฟลเดอร์อย่างน้อยหนึ่งฝั่งเพื่อดูรายการ")
+
+        self.table_textbox.configure(state="disabled")
 
         self.table_textbox.configure(state="disabled")
 

@@ -12,6 +12,7 @@ class LeftPanel(ctk.CTkScrollableFrame):
         self.dpi_value = ctk.IntVar(value=150)
         self.gen_docx = ctk.BooleanVar(value=False)
         self.gen_pdf = ctk.BooleanVar(value=True)
+        self.allow_unmatched = ctk.BooleanVar(value=False)
         self.op_mode = ctk.StringVar(value="compare")
         self.doc_type_var = ctk.StringVar(value="etax")
         
@@ -87,6 +88,14 @@ class LeftPanel(ctk.CTkScrollableFrame):
         )
         self.chk_pdf.pack(anchor="w", padx=30, pady=5)
         self.chk_pdf.configure(state="disabled")
+
+        self.chk_unmatched = ctk.CTkCheckBox(
+            self, 
+            text="รองรับเอกสารฝั่งเดียว (Allow Unmatched)", 
+            variable=self.allow_unmatched,
+            command=self._trigger_update_table
+        )
+        self.chk_unmatched.pack(anchor="w", padx=30, pady=5)
 
         # ส่วนที่ 2.5: เลือกประเภทเอกสาร (สำหรับโหมด Rename เท่านั้น)
         self.frm_doc_container = ctk.CTkFrame(self, fg_color="transparent")
@@ -187,6 +196,7 @@ class LeftPanel(ctk.CTkScrollableFrame):
             self.btn_rev.configure(state="disabled")
             self.lbl_rev.configure(text_color="gray")
             self.frm_doc_type.pack_forget()
+            self.chk_unmatched.pack_forget()
             self.lbl_orig.configure(text="📂 โฟลเดอร์ต้นฉบับ (Original):")
             self.lbl_rev.configure(text="📂 โฟลเดอร์แก้ไข (Revised):")
             self.btn_compare.configure(text="🚀 เริ่มเปรียบเทียบ")
@@ -205,6 +215,10 @@ class LeftPanel(ctk.CTkScrollableFrame):
             self.btn_rev.configure(state="normal")
             self.lbl_rev.configure(text_color=["#000000", "#FFFFFF"])
             self.frm_doc_type.pack_forget()
+            
+            # เรียง pack กลับเข้ามาที่เดิมคือใต้ Output format
+            self.chk_unmatched.pack(anchor="w", padx=30, pady=5, after=self.chk_pdf)
+            
             self.lbl_orig.configure(text="📂 โฟลเดอร์ต้นฉบับ (Original):")
             self.lbl_rev.configure(text="📂 โฟลเดอร์แก้ไข (Revised):")
             self.btn_compare.configure(text="🚀 เริ่มเปรียบเทียบ")
